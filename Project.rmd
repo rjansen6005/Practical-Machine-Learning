@@ -1,0 +1,86 @@
+---
+title: "Practical Machine Learning Project"
+author: "Robert B. Jansen"
+date: "May 8, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+##Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+## Preparing the environment for the analysis includes loading the data and any necessary R packages. 
+The data for this project is courtesy of http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har.
+
+
+```{r, load data and packages, echo=FALSE}
+#load required R packages
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(randomForest)
+library(corrplot)
+#Download the data
+download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv","pml-training.csv")
+download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv","pml-testing.csv")
+#Read the data
+train_raw<-read.csv('pml-training.csv')
+test_raw<-read.csv('pml-testing.csv')
+#Clean the data: remove columns with 0
+train_raw <- train_raw[, colSums(is.na(train_raw)) == 0] 
+test_raw <- test_raw[, colSums(is.na(test_raw)) == 0] 
+#Remove unnecessary columns
+classe <- train_raw$classe
+trainRemove <- grepl("^X|timestamp|window", names(train_raw))
+train_raw <- train_raw[, !trainRemove]
+train_clean <- train_raw[, sapply(train_raw, is.numeric)]
+train_clean$classe <- classe
+test_removed <- grepl("^X|timestamp|window", names(test_raw))
+test_raw <- test_raw[, !test_removed]
+test_clean <- test_raw[, sapply(test_raw, is.numeric)]
+#Slice the data into a training and testing data sets using a 70% 30% split.
+set.seed(1701) 
+in_train <- createDataPartition(train_clean$classe, p=0.70, list=F)
+train_data <- train_clean[in_train, ]
+test_data <- train_clean[-in_train, ]
+
+```
+## Data modeling
+Using the Random Forest method create a predictive model for activity recognition.
+
+```{r}
+control_rf <- trainControl(method="cv", 5)
+model_rf <- train(classe ~ ., data=train_data, method="rf", trControl=control_rf, ntree=250)
+model_rf
+```
+
+Estimate the performance of the Random Forest method.
+```{r}
+predict_rf <- predict(model_rf, test_data)
+confusionMatrix(test_data$classe, predict_rf)
+accuracy <- postResample(predict_rf, test_data$classe)
+accuracy
+out_of_sample <- 1 - as.numeric(confusionMatrix(test_data$classe, predict_rf)$overall[1])
+out_of_sample
+```
+The accuracy for this model is 99.83% and an estimated out of sample error of 0.14%
+##Test data prediction
+Applying the model to the original test data set the following results are achieved.
+```{r}
+result <- predict(model_rf, test_clean[, -length(names(test_clean))])
+result
+```
+## Appendix: Data visualizations
+
+
+```{r}
+#Decision Tree Visulization
+treeModel <- rpart(classe ~ ., data=train_data, method="class")
+prp(treeModel) # fast plot
+# Correlation Plot
+corrPlot <- cor(train_data[, -length(names(train_data))])
+corrplot(corrPlot, method="color")
+```
